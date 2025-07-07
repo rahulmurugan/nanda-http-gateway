@@ -128,16 +128,41 @@ export class NANDAAPIClient {
       // Call real NANDA Registry API endpoint
       const response = await this.client.get(`/api/v1/discovery/search/?${queryParams.toString()}`);
       
-      // Handle NANDA Registry API response format
-      if (response.data && response.data.results) {
-        return {
-          services: response.data.results || [],
-          totalCount: response.data.count || 0,
-          hasNext: !!response.data.next,
-          hasPrevious: !!response.data.previous
-        };
+      // Log the actual response to understand the format
+      logger.info('NANDA API search response structure', {
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        dataType: typeof response.data,
+        sampleData: response.data ? JSON.stringify(response.data).substring(0, 200) : 'no data'
+      });
+      
+      // Handle different possible NANDA Registry API response formats
+      if (response.data) {
+        // Try different possible response structures
+        const results = response.data.results || response.data.data || response.data.servers || response.data;
+        const count = response.data.count || response.data.total || response.data.total_count || 0;
+        
+        if (Array.isArray(results)) {
+          return {
+            services: results,
+            totalCount: count,
+            hasNext: !!response.data.next,
+            hasPrevious: !!response.data.previous
+          };
+        } else if (Array.isArray(response.data)) {
+          return {
+            services: response.data,
+            totalCount: response.data.length,
+            hasNext: false,
+            hasPrevious: false
+          };
+        }
       }
 
+      logger.warn('Unexpected NANDA API response format', { 
+        responseData: response.data,
+        status: response.status 
+      });
       throw new Error('Invalid response format from NANDA Registry');
     } catch (error) {
       // If API fails, use mock data for development/testing
