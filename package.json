@@ -11,7 +11,13 @@
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\""
   },
-  "keywords": ["nanda", "api", "gateway", "discovery", "mcp"],
+  "keywords": [
+    "nanda",
+    "api",
+    "gateway",
+    "discovery",
+    "mcp"
+  ],
   "author": "Rahul Murugan",
   "license": "MIT",
   "dependencies": {

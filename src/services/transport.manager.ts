@@ -200,18 +200,43 @@ export class TransportManager {
     }
 
     try {
-      // Try standard MCP tools endpoint
-      const response = await connection.client.get('/tools');
-      return response.data.tools || response.data || [];
+      // Try standard MCP tools list endpoint
+      const response = await connection.client.post('/call', {
+        method: 'tools/list',
+        params: {}
+      });
+      
+      const tools = response.data?.result?.tools || response.data?.tools || [];
+      return tools.map((tool: any) => ({
+        name: tool.name,
+        description: tool.description || `${tool.name} tool`,
+        inputSchema: tool.inputSchema || tool.input_schema || {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }));
     } catch (error) {
-      logger.warn('Standard tools endpoint failed, using fallback', { error: error.message });
+      logger.warn('Standard MCP tools/list failed, trying alternative', { error: error.message });
       
-      // Return known tools for Starbucks service
-      if (connection.endpoint.includes('railway.app')) {
-        return this.getStarbucksTools();
+      try {
+        // Try alternative tools endpoint
+        const response = await connection.client.get('/tools');
+        const tools = response.data.tools || response.data || [];
+        return Array.isArray(tools) ? tools : [];
+      } catch (altError) {
+        logger.warn('Alternative tools endpoint failed, using service-specific fallback', { 
+          error: altError.message,
+          endpoint: connection.endpoint
+        });
+        
+        // Return known tools for Starbucks service as fallback
+        if (connection.endpoint.includes('railway.app')) {
+          return this.getStarbucksTools();
+        }
+        
+        return [];
       }
-      
-      return [];
     }
   }
 
@@ -262,12 +287,35 @@ export class TransportManager {
       throw new Error('HTTP client not initialized');
     }
 
-    // Make HTTP request to execute the tool
-    const response = await connection.client.post(`/tools/${toolName}`, {
-      parameters
-    });
+    try {
+      // Try standard MCP tool execution endpoint
+      const response = await connection.client.post(`/call`, {
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: parameters
+        }
+      });
 
-    return response.data;
+      return response.data;
+    } catch (error) {
+      logger.warn('Standard MCP endpoint failed, trying alternative', { toolName, error: error.message });
+      
+      // Try alternative endpoint format
+      try {
+        const response = await connection.client.post(`/tools/${toolName}`, {
+          parameters
+        });
+        return response.data;
+      } catch (altError) {
+        logger.error('Both tool execution endpoints failed', { 
+          toolName, 
+          standardError: error.message,
+          altError: altError.message 
+        });
+        throw new Error(`Tool execution failed: ${error.message}`);
+      }
+    }
   }
 
   /**

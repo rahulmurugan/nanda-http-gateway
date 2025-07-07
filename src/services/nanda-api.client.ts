@@ -49,7 +49,7 @@ export class NANDAAPIClient {
 
   private constructor() {
     // Initialize with NANDA Registry URL from environment
-    this.baseURL = process.env.NANDA_API_BASE_URL || 'https://ui.nanda-registry.com';
+    this.baseURL = process.env.NANDA_API_BASE_URL || 'https://nanda-registry.com';
     this.apiToken = process.env.NANDA_API_TOKEN; // Optional - only needed for authenticated endpoints
     
     // Create axios instance with default configuration
@@ -117,29 +117,28 @@ export class NANDAAPIClient {
    */
   async searchServices(params: SearchParams): Promise<SearchResponse> {
     try {
-      // Build query parameters
+      // Build query parameters for NANDA Registry API
       const queryParams = new URLSearchParams();
       if (params.query) queryParams.append('q', params.query);
-      if (params.category) queryParams.append('category', params.category);
+      if (params.category) queryParams.append('type', params.category); // NANDA uses 'type' not 'category'
       if (params.tags?.length) queryParams.append('tags', params.tags.join(','));
       queryParams.append('limit', params.limit.toString());
       queryParams.append('offset', params.offset.toString());
-      if (params.sortBy) queryParams.append('sort_by', params.sortBy);
 
-      // Call NANDA API endpoint
-      const response = await this.client.get(`/api/servers?${queryParams.toString()}`);
+      // Call real NANDA Registry API endpoint
+      const response = await this.client.get(`/api/v1/discovery/search/?${queryParams.toString()}`);
       
-      // Handle different possible response formats from NANDA API
-      if (response.data) {
+      // Handle NANDA Registry API response format
+      if (response.data && response.data.results) {
         return {
-          services: response.data.servers || response.data.data || [],
-          totalCount: response.data.total_count || response.data.total || 0,
-          hasNext: response.data.has_next || false,
-          hasPrevious: response.data.has_previous || false
+          services: response.data.results || [],
+          totalCount: response.data.count || 0,
+          hasNext: !!response.data.next,
+          hasPrevious: !!response.data.previous
         };
       }
 
-      throw new Error('Invalid response format');
+      throw new Error('Invalid response format from NANDA Registry');
     } catch (error) {
       // If API fails, use mock data for development/testing
       logger.warn('Using mock data due to NANDA API error', error);
@@ -156,8 +155,12 @@ export class NANDAAPIClient {
    */
   async getPopularServices(timeframe: 'day' | 'week' | 'month'): Promise<NANDAService[]> {
     try {
-      const response = await this.client.get(`/discovery/popular?timeframe=${timeframe}`);
-      return response.data.servers || response.data.data || [];
+      // Map our timeframe to NANDA API period format
+      const periodMap = { day: 'daily', week: 'weekly', month: 'monthly' };
+      const period = periodMap[timeframe] || 'weekly';
+      
+      const response = await this.client.get(`/api/v1/discovery/popular/?period=${period}&limit=20`);
+      return response.data.results || [];
     } catch (error) {
       logger.warn('Using mock data for popular services', error);
       return this.getMockData({} as SearchParams).services;
@@ -173,16 +176,21 @@ export class NANDAAPIClient {
    */
   async getServiceById(serviceId: string): Promise<NANDAService | null> {
     try {
-      const response = await this.client.get(`/servers/${serviceId}`);
-      return response.data.data || response.data;
+      const response = await this.client.get(`/api/v1/servers/${serviceId}/`);
+      return response.data || null;
     } catch (error) {
-      // Check if it's our known Starbucks service (for testing)
-      if (serviceId === 'cf921f9b-136f-4be0-802c-bb7e19855e96') {
-        return this.getStarbucksMockService();
-      }
-      
       if (axios.isAxiosError(error) && error.response?.status === 404) {
         return null;
+      }
+      
+      logger.warn('NANDA API call failed, using mock data for known service', { 
+        serviceId, 
+        error: error.message 
+      });
+      
+      // Fallback to mock data only for known Starbucks service
+      if (serviceId === 'cf921f9b-136f-4be0-802c-bb7e19855e96') {
+        return this.getStarbucksMockService();
       }
       
       throw new AppError(500, 'Failed to fetch service details', 'API_ERROR');

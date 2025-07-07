@@ -172,7 +172,8 @@ export class EVMAuthService {
       logger.info('Checking token ownership on Radius blockchain', {
         walletAddress,
         contractAddress,
-        tokenId
+        tokenId,
+        rpcUrl: this.radiusRpcUrl
       });
 
       // Make RPC call to Radius blockchain
@@ -187,10 +188,28 @@ export class EVMAuthService {
           'latest'
         ],
         id: 1
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000 // 10 second timeout
       });
 
       if (response.data.error) {
-        logger.error('RPC call failed', response.data.error);
+        logger.error('Radius RPC call failed', {
+          error: response.data.error,
+          contractAddress,
+          tokenId
+        });
+        return false;
+      }
+
+      if (!response.data.result || response.data.result === '0x') {
+        logger.warn('Empty result from contract call', {
+          contractAddress,
+          tokenId,
+          result: response.data.result
+        });
         return false;
       }
 
@@ -200,10 +219,13 @@ export class EVMAuthService {
       // Check if the owner matches the provided wallet address
       const isOwner = ownerAddress.toLowerCase() === walletAddress.toLowerCase();
       
-      logger.info('Token ownership check result', {
+      logger.info('Token ownership verification completed', {
+        contractAddress,
+        tokenId,
         tokenOwner: ownerAddress,
         requestedWallet: walletAddress,
-        isOwner
+        isOwner,
+        rpcResponse: response.data.result
       });
 
       return isOwner;
@@ -213,8 +235,12 @@ export class EVMAuthService {
         error: error.message,
         walletAddress,
         contractAddress,
-        tokenId
+        tokenId,
+        rpcUrl: this.radiusRpcUrl
       });
+      
+      // For development, you might want to return true to bypass verification
+      // return true; // REMOVE THIS IN PRODUCTION
       return false;
     }
   }
