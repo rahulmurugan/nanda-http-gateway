@@ -119,12 +119,26 @@ export class ServicesController {
       );
     }
 
-    // Create connection
+    // Create connection - map NANDA API fields to our internal format
+    // Detect transport type - prefer Streamable HTTP (Anthropic's recommended approach)
+    const isMCPServer = service.url && (
+      service.url.includes('awsapprunner.com') || 
+      service.url.includes('3.133.113.164') ||
+      service.description?.toLowerCase().includes('sse') ||
+      service.description?.toLowerCase().includes('mcp')
+    );
+    
+    // Transport priority: Streamable HTTP > WebSocket > SSE > HTTP
+    let transport = service.protocols?.[0] || service.transport_type || 'http';
+    if (isMCPServer) {
+      transport = 'streamable-http'; // Try Streamable HTTP first (Anthropic's recommended approach)
+    }
+    
     const connection = await this.connectionManager.createConnection({
       serviceId: service.id,
       serviceName: service.name,
-      endpoint: service.endpoint_url,
-      transport: service.transport_type,
+      endpoint: service.url || service.endpoint_url,
+      transport: transport,
       evmAuth: evmAuth,
       timeout: timeout,
       verifyHealth: verifyHealth

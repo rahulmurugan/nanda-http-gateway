@@ -119,7 +119,9 @@ export class NANDAAPIClient {
     try {
       // Build query parameters for NANDA Registry API
       const queryParams = new URLSearchParams();
-      if (params.query) queryParams.append('q', params.query);
+      // NANDA API requires non-empty q parameter, use wildcard if no query provided
+      const searchQuery = params.query || 'server';
+      queryParams.append('q', searchQuery);
       if (params.category) queryParams.append('type', params.category); // NANDA uses 'type' not 'category'
       if (params.tags?.length) queryParams.append('tags', params.tags.join(','));
       queryParams.append('limit', params.limit.toString());
@@ -136,18 +138,19 @@ export class NANDAAPIClient {
         sampleData: response.data ? JSON.stringify(response.data).substring(0, 200) : 'no data'
       });
       
-      // Handle different possible NANDA Registry API response formats
+      // Handle NANDA Registry API response format
       if (response.data) {
-        // Try different possible response structures
-        const results = response.data.results || response.data.data || response.data.servers || response.data;
-        const count = response.data.count || response.data.total || response.data.total_count || 0;
+        // NANDA API returns: { data: [...], pagination: {...} }
+        const results = response.data.data || response.data.results || response.data;
+        const pagination = response.data.pagination || {};
+        const count = pagination.total || results.length || 0;
         
         if (Array.isArray(results)) {
           return {
             services: results,
             totalCount: count,
-            hasNext: !!response.data.next,
-            hasPrevious: !!response.data.previous
+            hasNext: !!pagination.next_page_url,
+            hasPrevious: !!pagination.prev_page_url
           };
         } else if (Array.isArray(response.data)) {
           return {

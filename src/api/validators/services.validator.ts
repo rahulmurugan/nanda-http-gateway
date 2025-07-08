@@ -1,10 +1,8 @@
 import Joi from 'joi';
 
 export const searchServicesSchema = Joi.object({
-  q: Joi.string().min(1).max(100).optional(),
-  category: Joi.string().valid(
-    'business', 'development', 'productivity', 'finance', 'entertainment', 'other'
-  ).optional(),
+  q: Joi.string().max(100).allow('').optional(),
+  category: Joi.string().optional(), // Allow any category value
   tags: Joi.string().optional(), // comma-separated
   limit: Joi.number().integer().min(1).max(100).default(20),
   offset: Joi.number().integer().min(0).default(0),

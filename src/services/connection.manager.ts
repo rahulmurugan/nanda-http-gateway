@@ -122,12 +122,65 @@ export class ConnectionManager {
         endpoint: params.endpoint
       });
 
-      const transportConnection = await this.transportManager.connect({
-        endpoint: params.endpoint,
-        transport: params.transport as any,
-        timeout: params.timeout || 30000,
-        evmAuth: connection.evmAuth
-      });
+      let transportConnection;
+      let finalTransport = params.transport;
+      
+      // Transport fallback chain: Streamable HTTP → WebSocket → SSE → HTTP
+      if (params.transport === 'streamable-http') {
+        try {
+          transportConnection = await this.transportManager.connect({
+            endpoint: params.endpoint,
+            transport: 'streamable-http',
+            timeout: params.timeout || 30000,
+            evmAuth: connection.evmAuth,
+            connectionId: connectionId
+          });
+        } catch (streamError) {
+          logger.warn('Streamable HTTP connection failed, falling back to WebSocket', { 
+            connectionId, 
+            error: streamError.message 
+          });
+          
+          try {
+            // Fall back to WebSocket
+            finalTransport = 'websocket';
+            transportConnection = await this.transportManager.connect({
+              endpoint: params.endpoint,
+              transport: 'websocket',
+              timeout: params.timeout || 30000,
+              evmAuth: connection.evmAuth,
+              connectionId: connectionId
+            });
+          } catch (wsError) {
+            logger.warn('WebSocket connection failed, falling back to SSE', { 
+              connectionId, 
+              error: wsError.message 
+            });
+            
+            // Fall back to SSE
+            finalTransport = 'sse';
+            transportConnection = await this.transportManager.connect({
+              endpoint: params.endpoint,
+              transport: 'sse',
+              timeout: params.timeout || 30000,
+              evmAuth: connection.evmAuth,
+              connectionId: connectionId
+            });
+          }
+        }
+      } else {
+        // Direct connection for other transports
+        transportConnection = await this.transportManager.connect({
+          endpoint: params.endpoint,
+          transport: params.transport as any,
+          timeout: params.timeout || 30000,
+          evmAuth: connection.evmAuth,
+          connectionId: connectionId
+        });
+      }
+      
+      // Update connection with actual transport used
+      connection.transport = finalTransport;
 
       // Step 3: Discover tools from the connected service
       logger.info('Discovering tools from service', { connectionId });

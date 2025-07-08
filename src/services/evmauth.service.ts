@@ -291,7 +291,17 @@ export class EVMAuthService {
     // ownerOf(uint256) function selector: 0x6352211e
     const functionSelector = '0x6352211e';
     const tokenIdHex = parseInt(tokenId, 10).toString(16).padStart(64, '0');
-    return functionSelector + tokenIdHex;
+    const encodedCall = functionSelector + tokenIdHex;
+    
+    logger.info('Encoding ownerOf call', {
+      tokenId,
+      tokenIdNumeric: parseInt(tokenId, 10),
+      tokenIdHex,
+      functionSelector,
+      fullEncodedCall: encodedCall
+    });
+    
+    return encodedCall;
   }
 
   /**
